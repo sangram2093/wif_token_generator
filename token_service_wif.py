@@ -1,8 +1,5 @@
-# token_service_wif.py
 import os
-from google.auth.transport.requests import Request
-from google.oauth2 import id_token as google_id_token
-from google.oauth2 import credentials as oauth2_credentials
+import requests
 
 WIF_HOME = os.environ.get("WIF_HOME", ".")
 WIF_TOKEN_FILENAME = os.path.join(WIF_HOME, "wif_token.txt")
@@ -14,11 +11,22 @@ def retrieve_gcp_svc_token(audience: str) -> str:
     with open(WIF_TOKEN_FILENAME, "r") as f:
         access_token = f.read().strip()
 
-    # Create Credentials object directly from the impersonated SA token
-    impersonated_sa_creds = oauth2_credentials.Credentials(token=access_token)
+    # Your impersonated Service Account email (the one in get_impersonated_credentials)
+    target_service_account = "traj-wif-sae-cd-dev-tlt-fr-a00-1.iam.gserviceaccount.com"
 
-    # Use fetch_id_token to get Cloud Run audience-specific token
-    auth_req = Request()
-    id_token = google_id_token.fetch_id_token(auth_req, audience, creds=impersonated_sa_creds)
+    url = f"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{target_service_account}:generateIdToken"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    body = {
+        "audience": audience,
+        "includeEmail": True
+    }
 
+    response = requests.post(url, headers=headers, json=body)
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to get ID token: {response.status_code} - {response.text}")
+
+    id_token = response.json()["token"]
     return id_token
